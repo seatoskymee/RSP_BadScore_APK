@@ -19,7 +19,8 @@ html,body{margin:0;height:100%;background:#0E1116;color:#fff;font-family:sans-se
 .serve{position:absolute;top:1.5vh;left:2vw;color:#FFC53D;font-size:3vh;font-weight:bold}
 .flag{color:#FFC53D;font-size:4vh;font-weight:bold;min-height:5vh}
 #graph{display:block;width:98vw;height:22vh;margin:1vh 1vw 0;background:#171B22}
-#msg{height:8vh;line-height:8vh;text-align:center;font-size:4.5vh;color:#FFC53D;white-space:nowrap}
+#note{height:3vh;line-height:3vh;text-align:center;font-size:2.2vh;color:#9AA4B2;white-space:nowrap}
+#msg{height:5vh;line-height:5vh;text-align:center;font-size:3.8vh;color:#FFC53D;white-space:nowrap}
 </style></head><body>
 <div id="info"></div>
 <a id="app" href="https://github.com/seatoskymee/RSP_BadScore_APK/releases/latest/download/RSP_BadScore.apk">⬇ 앱 내려받기</a>
@@ -29,6 +30,7 @@ html,body{margin:0;height:100%;background:#0E1116;color:#fff;font-family:sans-se
 </div>
 <canvas id="graph"></canvas>
 <div id="msg"></div>
+<div id="note"></div>
 <script>
 var board = null;
 function el(id) { return document.getElementById(id); }
@@ -65,7 +67,17 @@ run('A',d.colorA);run('B',d.colorB);
 var tx=L,items=[[d.colorA,d.nameA+' '+a],[d.colorB,d.nameB+' '+b]];
 for(i=0;i<2;i++){g.fillStyle=items[i][0];g.fillRect(tx,6,10,10);tx+=14;g.fillStyle='#9AA4B2';g.fillText(items[i][1],tx,15);tx+=g.measureText(items[i][1]).width+16;}}function draw() {
   if (!board) return;
-  var played = board.startedAt ? (board.endedAt || Date.now()) - board.startedAt : 0;
+  // A closed board stops its clock where the phone last reported in.
+  var until = board.endedAt || (board.ended && board.aliveAt ? board.aliveAt : Date.now());
+  var played = board.startedAt ? until - board.startedAt : 0;
+  var quiet = board.aliveAt ? Date.now() - board.aliveAt : 0, note = '';
+  if (board.ended) {
+    note = '점수 공유가 종료되었습니다 (점수판 앱을 닫음)';
+  } else if (quiet > 90000) {
+    note = '점수판 앱이 화면에 떠 있지 않습니다 · 마지막 신호 ' + Math.floor(quiet / 60000) + '분 전';
+  }
+  el('note').textContent = note;
+  el('board').style.opacity = board.ended ? 0.45 : 1;
   el('info').textContent = board.info + ' · ⏱ ' + clock(played);
   side('l', board.left);
   side('r', board.right);
