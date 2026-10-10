@@ -46,7 +46,7 @@ function side(id, s) {
   e.style.background = s.color;
   e.querySelector('.name').textContent = s.name;
   e.querySelector('.score').textContent = s.score;
-  e.querySelector('.serve').textContent = s.serve ? '● 서브' : '';
+  e.querySelector('.serve').textContent = (s.serve && !s.court) ? '● 서브' : '';
   e.querySelector('.flag').textContent = s.flag;
 }
 function graph(d){var c=document.getElementById('graph'),r=window.devicePixelRatio||1,w=c.clientWidth,h=c.clientHeight;
