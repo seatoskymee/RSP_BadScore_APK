@@ -91,9 +91,11 @@ function poll() {
   })(n);
 }
 // Without an event code: the tournaments that a court has refreshed within the last hour.
-function drawList(list) {
+function drawList(doc) {
+  // A tournament its organizer has ended is off the list, whatever a late court still sends.
+  var list = (doc && doc.list) || {}, closed = (doc && doc.closed) || {};
   var now = Date.now(), grid = document.getElementById('grid'), codes = [];
-  for (var c in list || {}) if (/^[a-z0-9가-힣]{2,12}$/.test(c) && now - list[c] < LISTED) codes.push(c);
+  for (var c in list) if (/^[a-z0-9가-힣]{2,12}$/.test(c) && now - list[c] < LISTED && !closed[c]) codes.push(c);
   codes.sort(function (a, b) { return list[b] - list[a]; });
   grid.textContent = '';
   codes.forEach(function (c) {
@@ -107,7 +109,7 @@ function drawList(list) {
   document.getElementById('sub').textContent = '대회 ' + codes.length + '개 · ' + two(new Date(now).getHours()) + ':' + two(new Date(now).getMinutes());
 }
 function pollList() {
-  fetch('https://' + host + '/boards/event-list/list.json', { cache: 'no-store' })
+  fetch('https://' + host + '/boards/event-list.json', { cache: 'no-store' })
     .then(function (r) { return r.json(); })
     .then(drawList)
     .catch(function () {});
