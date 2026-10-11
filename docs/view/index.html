@@ -71,6 +71,7 @@ function run(t,col){var p=0;g.beginPath();g.moveTo(x(0),y(0));for(var k=0;k<n;k+
 g.strokeStyle=col;g.lineWidth=2.5;g.lineJoin='round';g.stroke();g.fillStyle=col;g.beginPath();g.arc(x(n),y(p),4,0,6.3);g.fill();}
 run('A',d.colorA);run('B',d.colorB);
 var tx=L,items=[[d.colorA,d.nameA+' '+a],[d.colorB,d.nameB+' '+b]];
+if(d.tag){g.fillStyle='#FFC53D';g.fillText(d.tag,tx,15);tx+=g.measureText(d.tag).width+12;}
 for(i=0;i<2;i++){g.fillStyle=items[i][0];g.fillRect(tx,6,10,10);tx+=14;g.fillStyle='#9AA4B2';g.fillText(items[i][1],tx,15);tx+=g.measureText(items[i][1]).width+16;}}var sound=false,lastSaid=null;
 function say(t){if(!sound||!window.speechSynthesis)return;speechSynthesis.cancel();var u=new SpeechSynthesisUtterance(t);u.lang='ko-KR';u.volume=vol;u.rate=rate;speechSynthesis.speak(u);}
 var vol=1,rate=1;try{vol=Number(localStorage.getItem('bsVol')||1);rate=Number(localStorage.getItem('bsRate')||1);}catch(e){}
