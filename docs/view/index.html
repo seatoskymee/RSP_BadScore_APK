@@ -128,6 +128,8 @@ soundButton();
 tuneControls();
 var query = new URLSearchParams(location.search);
 var host = query.get('h') || '', id = query.get('b') || '';
+// &g=<match id> on a court's history (b=h-<code>-<court>): one finished game, as it ended.
+var past = query.get('g') || '';
 // Says "one screen is watching this" to boards/view-stats once a minute, so the administrator's
 // page can count viewers against the database's limits. Only a random id for this tab and the
 // time go there; the entry is taken back when the page is left.
@@ -175,8 +177,26 @@ function watchLoad() {
 }
 // Only ever talk to a Firebase database, whatever the link says.
 var hostOk = /^[a-z0-9.-]+\.(firebaseio\.com|firebasedatabase\.app)$/.test(host);
-if (!hostOk || !/^[a-z0-9가-힣-]{6,24}$/.test(id)) {
+if (!hostOk || !/^[a-z0-9가-힣-]{6,24}$/.test(id) || (past && !/^[0-9_]{6,24}$/.test(past))) {
   el('msg').textContent = '링크가 올바르지 않습니다';
+} else if (past) {
+  // Read once: a finished game does not change, holds no connection and is not counted as watching.
+  fetch('https://' + host + '/boards/' + encodeURIComponent(id) + '/games/' + encodeURIComponent(past) + '.json', { cache: 'no-store' })
+    .then(function (r) { return r.json(); })
+    .then(function (b) {
+      if (!b) { el('msg').textContent = '경기 기록을 찾을 수 없습니다'; return; }
+      board = b;
+      draw();
+      var d = new Date(b.endedAt || 0), two = function (n) { return (n < 10 ? '0' : '') + n; };
+      el('note').textContent = '지난 경기 · ' + (d.getMonth() + 1) + '/' + d.getDate() + ' ' + two(d.getHours()) + ':' + two(d.getMinutes()) + ' 종료';
+      var home = el('home');
+      if (b.event && b.court) {
+        home.href = '../event/?h=' + host + '&e=' + encodeURIComponent(b.event) + '&c=' + b.court;
+        home.textContent = '← ' + b.court + '번 코트 지난 경기';
+        home.style.display = 'block';
+      }
+    })
+    .catch(function () { el('msg').textContent = '불러오지 못했습니다'; });
 } else {
   var source = null, poller = null, away = null;
   var address = 'https://' + host + '/boards/' + encodeURIComponent(id) + '.json';

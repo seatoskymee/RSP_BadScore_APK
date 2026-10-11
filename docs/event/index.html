@@ -2,6 +2,8 @@
 <!--
   Tournament board: every court that has joined one event code, on one page.
   Link form: .../event/?h=<database host>&e=<event code>
+  With &c=<court number> as well, the page lists the games that court has finished
+  (boards/h-<code>-<court number>), each a link to that game's score and graph.
   A court that joins publishes its board to boards/e-<code>-<court number>, so this page needs no
   list: it simply asks for court 1 to 24 of that code and shows the ones that are in use.
   Without an event code (.../event/?h=<database host>) the page lists the tournaments that are
@@ -17,6 +19,9 @@ h1{font-size:22px;margin:0}
 #sub{color:#9AA4B2;font-size:14px}
 #grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;padding:12px 16px 24px}
 .court{background:#171B22;border-radius:14px;padding:10px;text-decoration:none;color:#fff;display:block}
+.court a{color:inherit;text-decoration:none}
+a.no{text-decoration:underline;text-underline-offset:4px}
+.last{color:#9AA4B2;font-size:14px;margin:6px 4px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .top{display:flex;justify-content:space-between;align-items:baseline;margin:0 4px 8px}
 .no{font-size:20px;font-weight:bold;color:#FFC53D}
 .state{font-size:13px;color:#9AA4B2}
@@ -46,6 +51,7 @@ var host = query.get('h') || '', code = (query.get('e') || '').toLowerCase();
 var boards = {}, live = {}, round = 0;
 function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
 function two(n) { return (n < 10 ? '0' : '') + n; }
+function hhmm(ms) { var d = new Date(ms); return two(d.getHours()) + ':' + two(d.getMinutes()); }
 function clock(ms) { var s = Math.floor(Math.max(0, ms) / 1000); return two(Math.floor(s / 60)) + ':' + two(s % 60); }
 function draw() {
   var now = Date.now(), grid = document.getElementById('grid'), shown = 0;
@@ -60,17 +66,20 @@ function draw() {
     if (idle > GONE || (b.message && b.endedAt && now - b.endedAt > DONE)) continue;
     shown++;
     live[n] = true;
-    var card = el('a', 'court');
-    card.href = '../view/?h=' + host + '&b=' + encodeURIComponent('e-' + code + '-' + two(n));
+    // The court's name leads to its past games; its score, to that court's own page.
+    var card = el('div', 'court');
     var top = el('div', 'top'), quiet = now - b.aliveAt;
-    top.appendChild(el('span', 'no', n + '번 코트'));
+    var name = el('a', 'no', n + '번 코트 ›');
+    name.href = '?h=' + host + '&e=' + encodeURIComponent(code) + '&c=' + n;
+    top.appendChild(name);
     var resting = !b.message && quiet < 90000 && idle >= RESTING;
     if (resting) card.style.opacity = 0.55;
     top.appendChild(el('span', 'state' + (quiet < 90000 && !b.message && !resting ? ' live' : ''),
       b.message ? '경기 종료' : quiet >= 90000 ? '신호 없음 ' + Math.floor(quiet / 60000) + '분'
         : resting ? '쉬는 중 · ' + Math.floor(idle / 60000) + '분' : '진행 중'));
     card.appendChild(top);
-    var sides = el('div', 'sides');
+    var sides = el('a', 'sides');
+    sides.href = '../view/?h=' + host + '&b=' + encodeURIComponent('e-' + code + '-' + two(n));
     [b.left, b.right].forEach(function (s) {
       var side = el('div', 'side');
       side.style.background = s.color;
@@ -81,6 +90,11 @@ function draw() {
     card.appendChild(sides);
     var played = b.startedAt ? (b.endedAt || now) - b.startedAt : 0;
     card.appendChild(el('div', 'foot' + (b.message ? ' msg' : ''), b.message || ((b.info || '') + ' · ⏱ ' + clock(played))));
+    // The game before this one, unless it is the very game still on the board.
+    if (b.last && b.last.id !== b.id) {
+      card.appendChild(el('div', 'last', '직전 경기 · ' + b.last.nameA + ' ' + b.last.score + ' ' + b.last.nameB +
+        (b.last.endedAt ? ' · ' + hhmm(b.last.endedAt) + ' 종료' : '')));
+    }
     grid.appendChild(card);
   }
   document.getElementById('empty').textContent = shown ? '' : '아직 참가한 코트가 없습니다. 점수판 앱의 메뉴 → 대회 모드에서 이 대회 코드로 참가하세요.';
@@ -101,6 +115,41 @@ function poll() {
       .then(function (b) { boards[n] = b; })
       .catch(function () {});
   })(n);
+}
+// One court's past games, newest first: each the board as it stood when the game ended.
+function drawHistory(games, court) {
+  var grid = document.getElementById('grid'), list = [];
+  for (var id in games || {}) if (games[id] && games[id].left) list.push([id, games[id]]);
+  list.sort(function (x, y) { return (y[1].endedAt || 0) - (x[1].endedAt || 0); });
+  grid.textContent = '';
+  list.forEach(function (g) {
+    var b = g[1], card = el('a', 'court');
+    card.href = '../view/?h=' + host + '&b=' + encodeURIComponent('h-' + code + '-' + two(court)) + '&g=' + encodeURIComponent(g[0]);
+    var top = el('div', 'top'), d = new Date(b.endedAt || b.aliveAt || 0);
+    top.appendChild(el('span', 'no', (d.getMonth() + 1) + '/' + d.getDate() + ' ' + hhmm(d.getTime()) + ' 종료'));
+    top.appendChild(el('span', 'state', b.startedAt && b.endedAt ? '⏱ ' + clock(b.endedAt - b.startedAt) : ''));
+    card.appendChild(top);
+    var sides = el('div', 'sides');
+    [b.left, b.right].forEach(function (s) {
+      var side = el('div', 'side');
+      side.style.background = s.color;
+      side.appendChild(el('div', 'name', s.name));
+      side.appendChild(el('div', 'score', s.score));
+      sides.appendChild(side);
+    });
+    card.appendChild(sides);
+    card.appendChild(el('div', 'foot msg', b.message || ''));
+    grid.appendChild(card);
+  });
+  document.getElementById('empty').textContent = list.length ? '' : '이 코트에서 끝난 경기가 아직 없습니다.';
+  document.getElementById('sub').textContent = '경기 ' + list.length + '건 · 눌러서 점수 내역 보기';
+}
+function pollHistory(court) {
+  if (document.hidden) return;
+  fetch('https://' + host + '/boards/' + encodeURIComponent('h-' + code + '-' + two(court)) + '/games.json', { cache: 'no-store' })
+    .then(function (r) { return r.json(); })
+    .then(function (games) { drawHistory(games, court); })
+    .catch(function () {});
 }
 // Without an event code: the tournaments that a court has refreshed within the last hour.
 function drawList(doc) {
@@ -191,6 +240,17 @@ if (hostOk && !code) {
   watching('l', 'all');
 } else if (!hostOk || !/^[a-z0-9가-힣]{2,12}$/.test(code)) {
   document.getElementById('empty').textContent = '링크가 올바르지 않습니다';
+} else if (/^([1-9]|1[0-9]|2[0-4])$/.test(query.get('c') || '')) {
+  var court = +query.get('c'), up = document.getElementById('back');
+  up.href = '?h=' + host + '&e=' + encodeURIComponent(code);
+  up.textContent = '← 대회 현황판';
+  up.style.display = 'inline';
+  document.title = code + ' · ' + court + '번 코트 지난 경기';
+  document.getElementById('title').textContent = code + ' · ' + court + '번 코트 지난 경기';
+  pollHistory(court);
+  // A list of finished games changes when one more ends, which is not often.
+  setInterval(function () { pollHistory(court); }, 60000);
+  document.addEventListener('visibilitychange', function () { pollHistory(court); });
 } else {
   var back = document.getElementById('back');
   back.href = '?h=' + host;
