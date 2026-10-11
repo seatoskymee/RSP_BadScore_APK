@@ -98,7 +98,11 @@ b.onclick=function(){sound=!sound;b.textContent=sound?'🔊 소리 켜짐':'🔇
   var until = board.endedAt || (board.ended && board.aliveAt ? board.aliveAt : Date.now());
   var played = board.startedAt ? until - board.startedAt : 0;
   var quiet = board.aliveAt ? Date.now() - board.aliveAt : 0, note = '';
-  if (board.ended) {
+  // A court of a tournament whose game has run past its time: over, whatever the phone is doing.
+  var limit = board.event && !board.message ? (board.limitAt || (board.startedAt ? board.startedAt + 3000000 : 0)) : 0;
+  if (limit && Date.now() > limit) {
+    note = '시간 종료 · 경기 시작 후 50분이 지나 자동으로 종료되었습니다';
+  } else if (board.ended) {
     note = '점수 공유가 종료되었습니다 (점수판 앱을 닫음)';
   } else if (quiet > 90000) {
     note = '점수판 앱이 화면에 떠 있지 않습니다 · 마지막 신호 ' + Math.floor(quiet / 60000) + '분 전';

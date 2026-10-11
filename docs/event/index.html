@@ -55,6 +55,15 @@ var COURTS = 24, FRESH = 6 * 3600 * 1000, LISTED = 3600 * 1000;
 // Judged by when the score last moved, not by the app being open: a court rests after RESTING,
 // is taken off the board after GONE, and a finished match stays up for DONE.
 var RESTING = 10 * 60000, GONE = 2 * 3600 * 1000, DONE = 30 * 60000;
+// A tournament game is stopped 50 minutes after its first point. The phone does that, but a
+// phone that was switched off cannot, so the page works it out too: from "limitAt" when the
+// board has it (it moves when the game is given more time), from the start otherwise.
+var TIME_LIMIT = 50 * 60000;
+function timeUp(b, now) {
+  if (b.message) return 0;
+  var limit = b.limitAt || (b.startedAt ? b.startedAt + TIME_LIMIT : 0);
+  return limit && now > limit ? limit : 0;
+}
 var query = new URLSearchParams(location.search);
 var host = query.get('h') || '', code = (query.get('e') || '').toLowerCase();
 var boards = {}, live = {}, round = 0;
@@ -72,7 +81,13 @@ function draw() {
     if (!b || !b.left || b.ended || !b.aliveAt || now - b.aliveAt > FRESH) continue;
     // Boards from an app that does not send "changedAt" yet count as changed at their last signal.
     var idle = now - (b.changedAt || b.aliveAt);
-    if (idle > GONE || (b.message && b.endedAt && now - b.endedAt > DONE)) continue;
+    var stopped = timeUp(b, now);
+    if (stopped) {
+      // Shown as the finished game it is, for as long as any other finished game.
+      b = Object.assign({}, b, { endedAt: stopped,
+        message: '시간 종료 · ' + b.left.name + ' ' + b.left.score + ' : ' + b.right.score + ' ' + b.right.name });
+    }
+    if ((idle > GONE && !stopped) || (b.message && b.endedAt && now - b.endedAt > DONE)) continue;
     shown++;
     live[n] = true;
     // The court's name leads to its past games; its score, to that court's own page.
