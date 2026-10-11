@@ -2,6 +2,8 @@
 <!--
   Tournament board: every court that has joined one event code, on one page.
   Link form: .../event/?h=<database host>&e=<event code>
+  With &a=1 instead of a code: the tournaments that are over (boards/event-archive); and
+  &e=<code>&r=<made>-<ended>&n=<courts>: the results of one of them, court by court.
   With &c=<court number> as well, the page lists the games that court has finished
   (boards/h-<code>-<court number>), each a link to that game's score and graph.
   A court that joins publishes its board to boards/e-<code>-<court number>, so this page needs no
@@ -17,7 +19,7 @@ html,body{margin:0;min-height:100%;background:#0E1116;color:#fff;font-family:san
 header{display:flex;align-items:baseline;gap:12px;padding:12px 16px 4px;flex-wrap:wrap}
 h1{font-size:22px;margin:0}
 #sub{color:#9AA4B2;font-size:14px}
-#grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;padding:12px 16px 24px}
+#grid,#grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;padding:12px 16px 24px}
 .court{background:#171B22;border-radius:14px;padding:10px;text-decoration:none;color:#fff;display:block}
 .court a{color:inherit;text-decoration:none}
 a.no{text-decoration:underline;text-underline-offset:4px}
@@ -35,12 +37,17 @@ a.no{text-decoration:underline;text-underline-offset:4px}
 #empty{padding:40px 16px;color:#9AA4B2;font-size:18px;text-align:center}
 #load{display:none;border-radius:999px;padding:2px 12px;font-size:13px;font-weight:bold}
 #load.busy{display:inline-block;background:#FFC53D;color:#111}#load.full{display:inline-block;background:#E24B4A;color:#fff}
+#empty:empty{display:none}
+#past{display:none}
+#past h2{font-size:18px;margin:8px 16px 0}
+#past p{color:#9AA4B2;font-size:15px;margin:8px 16px 24px}
 #back{color:#9AA4B2;font-size:14px;text-decoration:none;display:none}
 .event{font-size:30px;font-weight:bold;color:#FFC53D;margin:6px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 </style></head><body>
 <header><a id="back">← 대회 목록</a><h1 id="title">대회 현황판</h1><span id="sub"></span><span id="load"></span></header>
 <div id="grid"></div>
 <div id="empty"></div>
+<div id="past"><h2>종료된 대회 <span id="sub2" style="color:#9AA4B2;font-size:14px;font-weight:normal"></span></h2><div id="grid2"></div><p id="empty2"></p></div>
 <script>
 var COURTS = 24, FRESH = 6 * 3600 * 1000, LISTED = 3600 * 1000;
 // Judged by when the score last moved, not by the app being open: a court rests after RESTING,
@@ -116,33 +123,92 @@ function poll() {
       .catch(function () {});
   })(n);
 }
-// One court's past games, newest first: each the board as it stood when the game ended.
+function day(ms) { var d = new Date(ms); return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + hhmm(ms); }
+// A finished game as a card: the board as it stood when the game ended. It leads to that
+// game's own page, with its score and graph.
+function gameCard(id, b, court, label) {
+  var card = el('a', 'court');
+  card.href = '../view/?h=' + host + '&b=' + encodeURIComponent('h-' + code + '-' + two(court)) + '&g=' + encodeURIComponent(id);
+  var top = el('div', 'top');
+  top.appendChild(el('span', 'no', label + day(b.endedAt || b.aliveAt || 0) + ' 종료'));
+  top.appendChild(el('span', 'state', b.startedAt && b.endedAt ? '⏱ ' + clock(b.endedAt - b.startedAt) : ''));
+  card.appendChild(top);
+  var sides = el('div', 'sides');
+  [b.left, b.right].forEach(function (s) {
+    var side = el('div', 'side');
+    side.style.background = s.color;
+    side.appendChild(el('div', 'name', s.name));
+    side.appendChild(el('div', 'score', s.score));
+    sides.appendChild(side);
+  });
+  card.appendChild(sides);
+  card.appendChild(el('div', 'foot msg', b.message || ''));
+  return card;
+}
+// One court's past games, newest first.
 function drawHistory(games, court) {
   var grid = document.getElementById('grid'), list = [];
   for (var id in games || {}) if (games[id] && games[id].left) list.push([id, games[id]]);
   list.sort(function (x, y) { return (y[1].endedAt || 0) - (x[1].endedAt || 0); });
   grid.textContent = '';
-  list.forEach(function (g) {
-    var b = g[1], card = el('a', 'court');
-    card.href = '../view/?h=' + host + '&b=' + encodeURIComponent('h-' + code + '-' + two(court)) + '&g=' + encodeURIComponent(g[0]);
-    var top = el('div', 'top'), d = new Date(b.endedAt || b.aliveAt || 0);
-    top.appendChild(el('span', 'no', (d.getMonth() + 1) + '/' + d.getDate() + ' ' + hhmm(d.getTime()) + ' 종료'));
-    top.appendChild(el('span', 'state', b.startedAt && b.endedAt ? '⏱ ' + clock(b.endedAt - b.startedAt) : ''));
-    card.appendChild(top);
-    var sides = el('div', 'sides');
-    [b.left, b.right].forEach(function (s) {
-      var side = el('div', 'side');
-      side.style.background = s.color;
-      side.appendChild(el('div', 'name', s.name));
-      side.appendChild(el('div', 'score', s.score));
-      sides.appendChild(side);
-    });
-    card.appendChild(sides);
-    card.appendChild(el('div', 'foot msg', b.message || ''));
-    grid.appendChild(card);
-  });
+  list.forEach(function (g) { grid.appendChild(gameCard(g[0], g[1], court, '')); });
   document.getElementById('empty').textContent = list.length ? '' : '이 코트에서 끝난 경기가 아직 없습니다.';
   document.getElementById('sub').textContent = '경기 ' + list.length + '건 · 눌러서 점수 내역 보기';
+}
+// The tournaments that are over, newest first. Each leads to its results. Drawn on a page of
+// its own ([own]), or under the running tournaments.
+function drawArchive(list, own) {
+  var grid = document.getElementById(own ? 'grid' : 'grid2'), rows = [];
+  for (var key in list || {}) {
+    var t = list[key];
+    if (t && /^[a-z0-9가-힣]{2,12}$/.test(t.code || '') && t.closed) rows.push(t);
+  }
+  rows.sort(function (x, y) { return y.closed - x.closed; });
+  grid.textContent = '';
+  rows.forEach(function (t) {
+    var card = el('a', 'court'), courts = t.courts >= 1 && t.courts <= 24 ? t.courts : 24;
+    card.href = '?h=' + host + '&e=' + encodeURIComponent(t.code) + '&r=' + (t.made || 0) + '-' + t.closed + '&n=' + courts;
+    card.appendChild(el('div', 'event', '🏆 ' + t.code));
+    card.appendChild(el('div', 'foot', (t.made ? day(t.made) + ' ~ ' : '') + day(t.closed) + ' 종료 · 코트 ' + courts + '개'));
+    grid.appendChild(card);
+  });
+  document.getElementById(own ? 'empty' : 'empty2').textContent = rows.length ? '' : '종료된 대회 기록이 아직 없습니다.';
+  document.getElementById(own ? 'sub' : 'sub2').textContent = '대회 ' + rows.length + '개 · 눌러서 결과 보기';
+}
+function pollArchive(own) {
+  if (document.hidden) return;
+  fetch('https://' + host + '/boards/event-archive/list.json', { cache: 'no-store' })
+    .then(function (r) { return r.json(); })
+    .then(function (list) { drawArchive(list, own); })
+    .catch(function () {});
+}
+// One finished tournament: every game its courts ended between its being made and its end.
+// A later tournament of the same name keeps its games in the same place, hence the times.
+function showResults(from, to, courts) {
+  var all = [], waiting = courts, grid = document.getElementById('grid');
+  // Before "made" was recorded there is no start to go by: the week before the end, then.
+  if (!from) from = to - 7 * 86400000;
+  function done() {
+    if (--waiting > 0) return;
+    all.sort(function (x, y) { return x[2] - y[2] || (x[1].endedAt || 0) - (y[1].endedAt || 0); });
+    grid.textContent = '';
+    all.forEach(function (g) { grid.appendChild(gameCard(g[0], g[1], g[2], g[2] + '번 코트 · ')); });
+    document.getElementById('empty').textContent = all.length ? '' : '이 대회에 남아 있는 경기 기록이 없습니다.';
+    document.getElementById('sub').textContent = '경기 ' + all.length + '건 · ' + day(from) + ' ~ ' + day(to);
+  }
+  for (var n = 1; n <= courts; n++) (function (n) {
+    fetch('https://' + host + '/boards/' + encodeURIComponent('h-' + code + '-' + two(n)) + '/games.json', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (games) {
+        for (var id in games || {}) {
+          var b = games[id];
+          // An hour's grace at the end: the last game may be written down just after the close.
+          if (b && b.left && b.endedAt >= from && b.endedAt <= to + 3600000) all.push([id, b, n]);
+        }
+        done();
+      })
+      .catch(done);
+  })(n);
 }
 function pollHistory(court) {
   if (document.hidden) return;
@@ -231,7 +297,19 @@ function watching(kind, target) {
 }
 // Only ever talk to a Firebase database, whatever the link says.
 var hostOk = /^[a-z0-9.-]+\.(firebaseio\.com|firebasedatabase\.app)$/.test(host);
-if (hostOk && !code) {
+if (hostOk && !code && query.get('a')) {
+  var home = document.getElementById('back');
+  home.href = '?h=' + host;
+  home.textContent = '← 운영 중인 대회';
+  home.style.display = 'inline';
+  document.title = '지난 대회';
+  document.getElementById('title').textContent = '지난 대회';
+  pollArchive(true);
+} else if (hostOk && !code) {
+  // Under the running tournaments: the ones that are over. They change rarely.
+  document.getElementById('past').style.display = 'block';
+  pollArchive(false);
+  setInterval(function () { pollArchive(false); }, 300000);
   document.title = '운영 중인 대회';
   document.getElementById('title').textContent = '운영 중인 대회';
   (function again() { pollList(); setTimeout(again, LIST_PACE[load]); })();
@@ -240,6 +318,15 @@ if (hostOk && !code) {
   watching('l', 'all');
 } else if (!hostOk || !/^[a-z0-9가-힣]{2,12}$/.test(code)) {
   document.getElementById('empty').textContent = '링크가 올바르지 않습니다';
+} else if (/^\d{1,13}-\d{10,13}$/.test(query.get('r') || '')) {
+  var range = query.get('r').split('-'), count = +query.get('n');
+  var list = document.getElementById('back');
+  list.href = '?h=' + host + '&a=1';
+  list.textContent = '← 지난 대회';
+  list.style.display = 'inline';
+  document.title = code + ' · 대회 결과';
+  document.getElementById('title').textContent = code + ' · 대회 결과';
+  showResults(+range[0], +range[1], count >= 1 && count <= 24 ? count : 24);
 } else if (/^([1-9]|1[0-9]|2[0-4])$/.test(query.get('c') || '')) {
   var court = +query.get('c'), up = document.getElementById('back');
   up.href = '?h=' + host + '&e=' + encodeURIComponent(code);
