@@ -11,6 +11,7 @@
 html,body{margin:0;height:100%;background:#0E1116;color:#fff;font-family:sans-serif;overflow:hidden}
 #tune{display:none;position:absolute;top:6vh;right:2vw;z-index:5;background:#171B22;border:1px solid #3a4250;border-radius:1.5vh;padding:1vh 3vw;font-size:min(2.6vh,3.6vw);color:#fff}
 #tune label{display:flex;align-items:center;gap:2vw;margin:1.2vh 0}#tune input{width:40vw;max-width:260px}#tune span{min-width:3.2em;text-align:right;color:#FFC53D}
+#home{display:none;flex:none;white-space:nowrap;font-size:min(2.6vh,3.6vw);font-weight:bold;color:#FFC53D;text-decoration:none}
 #bar{display:flex;align-items:center;gap:3vw;height:6vh;padding:0 2vw;box-sizing:border-box}
 #app,#snd,#gear{flex:none;white-space:nowrap;font-size:min(2.6vh,3.6vw);font-weight:bold;color:#FFC53D;text-decoration:none;background:none;border:0;padding:0;font-family:inherit;cursor:pointer}
 #info{flex:1;min-width:0;color:#9AA4B2;font-size:min(3vh,3.4vw);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -25,7 +26,7 @@ html,body{margin:0;height:100%;background:#0E1116;color:#fff;font-family:sans-se
 #note{height:3vh;line-height:3vh;text-align:center;font-size:2.2vh;color:#9AA4B2;white-space:nowrap}
 #msg{height:5vh;line-height:5vh;text-align:center;font-size:3.8vh;color:#FFC53D;white-space:nowrap}
 </style></head><body>
-<div id="bar"><div id="info"></div>
+<div id="bar"><a id="home"></a><div id="info"></div>
 <button id="snd" type="button">🔇 소리 켜기</button>
 <button id="gear" type="button" aria-label="음성 설정">⚙</button>
 <a id="app" href="https://github.com/seatoskymee/RSP_BadScore_APK/releases/latest/download/RSP_BadScore.apk">⬇ 앱 내려받기</a></div>
@@ -107,6 +108,15 @@ b.onclick=function(){sound=!sound;b.textContent=sound?'🔊 소리 켜짐':'🔇
   side('r', board.right);
   graph(board);
   if (board.app) el('app').href = board.app;
+  // A court of a tournament links back to that tournament's board; a single board has no home.
+  var home = el('home');
+  if (board.event && /^[a-z0-9]{4,12}$/.test(board.event)) {
+    home.href = '../event/?h=' + host + '&e=' + board.event;
+    home.textContent = '← 대회 현황판' + (board.court ? ' · ' + board.court + '번 코트' : '');
+    home.style.display = 'block';
+  } else {
+    home.style.display = 'none';
+  }
   el('msg').textContent = board.message || '';
 }
 soundButton();
