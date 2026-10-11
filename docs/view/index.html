@@ -9,8 +9,10 @@
 <title>배드 스코어</title>
 <style>
 html,body{margin:0;height:100%;background:#0E1116;color:#fff;font-family:sans-serif;overflow:hidden}
+#tune{display:none;position:absolute;top:6vh;right:2vw;z-index:5;background:#171B22;border:1px solid #3a4250;border-radius:1.5vh;padding:1vh 3vw;font-size:min(2.6vh,3.6vw);color:#fff}
+#tune label{display:flex;align-items:center;gap:2vw;margin:1.2vh 0}#tune input{width:40vw;max-width:260px}#tune span{min-width:3.2em;text-align:right;color:#FFC53D}
 #bar{display:flex;align-items:center;gap:3vw;height:6vh;padding:0 2vw;box-sizing:border-box}
-#app,#snd{flex:none;white-space:nowrap;font-size:min(2.6vh,3.6vw);font-weight:bold;color:#FFC53D;text-decoration:none;background:none;border:0;padding:0;font-family:inherit;cursor:pointer}
+#app,#snd,#gear{flex:none;white-space:nowrap;font-size:min(2.6vh,3.6vw);font-weight:bold;color:#FFC53D;text-decoration:none;background:none;border:0;padding:0;font-family:inherit;cursor:pointer}
 #info{flex:1;min-width:0;color:#9AA4B2;font-size:min(3vh,3.4vw);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #board{display:flex;height:62vh;gap:1vw;padding:0 1vw;box-sizing:border-box}
 .side{flex:1;min-width:0;border-radius:2vh;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#171B22}
@@ -25,11 +27,13 @@ html,body{margin:0;height:100%;background:#0E1116;color:#fff;font-family:sans-se
 </style></head><body>
 <div id="bar"><div id="info"></div>
 <button id="snd" type="button">🔇 소리 켜기</button>
+<button id="gear" type="button" aria-label="음성 설정">⚙</button>
 <a id="app" href="https://github.com/seatoskymee/RSP_BadScore_APK/releases/latest/download/RSP_BadScore.apk">⬇ 앱 내려받기</a></div>
 <div id="board">
 <div class="side" id="l"><div class="serve"></div><div class="name"></div><div class="court"></div><div class="score"></div><div class="flag"></div></div>
 <div class="side" id="r"><div class="serve"></div><div class="name"></div><div class="court"></div><div class="score"></div><div class="flag"></div></div>
 </div>
+<div id="tune"><label>음량 <input id="vol" type="range" min="0" max="100" step="5"><span id="volv"></span></label><label>속도 <input id="rate" type="range" min="50" max="200" step="10"><span id="ratev"></span></label></div>
 <canvas id="graph"></canvas>
 <div id="msg"></div>
 <div id="note"></div>
@@ -68,8 +72,17 @@ g.strokeStyle=col;g.lineWidth=2.5;g.lineJoin='round';g.stroke();g.fillStyle=col;
 run('A',d.colorA);run('B',d.colorB);
 var tx=L,items=[[d.colorA,d.nameA+' '+a],[d.colorB,d.nameB+' '+b]];
 for(i=0;i<2;i++){g.fillStyle=items[i][0];g.fillRect(tx,6,10,10);tx+=14;g.fillStyle='#9AA4B2';g.fillText(items[i][1],tx,15);tx+=g.measureText(items[i][1]).width+16;}}var sound=false,lastSaid=null;
-function say(t){if(!sound||!window.speechSynthesis)return;speechSynthesis.cancel();var u=new SpeechSynthesisUtterance(t);u.lang='ko-KR';speechSynthesis.speak(u);}
-function sino(n){n=Number(n);if(!(n>=0&&n<100))return String(n);if(n==0)return '영';
+function say(t){if(!sound||!window.speechSynthesis)return;speechSynthesis.cancel();var u=new SpeechSynthesisUtterance(t);u.lang='ko-KR';u.volume=vol;u.rate=rate;speechSynthesis.speak(u);}
+var vol=1,rate=1;try{vol=Number(localStorage.getItem('bsVol')||1);rate=Number(localStorage.getItem('bsRate')||1);}catch(e){}
+if(!(vol>=0&&vol<=1))vol=1;if(!(rate>=0.5&&rate<=2))rate=1;
+function tuneControls(){var g=document.getElementById('gear'),p=document.getElementById('tune'),v=document.getElementById('vol'),r=document.getElementById('rate');
+if(!window.speechSynthesis){g.style.display='none';return;}
+function show(){document.getElementById('volv').textContent=Math.round(vol*100)+'%';document.getElementById('ratev').textContent=(Math.round(rate*10)/10).toFixed(1)+'배';}
+function keep(){try{localStorage.setItem('bsVol',vol);localStorage.setItem('bsRate',rate);}catch(e){}}
+g.onclick=function(){p.style.display=p.style.display=='block'?'none':'block';};
+v.value=Math.round(vol*100);r.value=Math.round(rate*100);show();
+v.oninput=function(){vol=v.value/100;show();keep();};r.oninput=function(){rate=r.value/100;show();keep();};
+v.onchange=r.onchange=function(){say('십오 대 십이');};}function sino(n){n=Number(n);if(!(n>=0&&n<100))return String(n);if(n==0)return '영';
 var d=['','일','이','삼','사','오','육','칠','팔','구'],t=Math.floor(n/10);return(t>1?d[t]:'')+(t>0?'십':'')+d[n%10];}
 function callout(d){if(d.message)return d.message.replace(/(\d+):(\d+)/,function(m,a,b){return sino(a)+' 대 '+sino(b)+',';});
 var l=d.left,r=d.right,a=r.serve?r.score:l.score,b=r.serve?l.score:r.score;return(a==b&&a>0)?sino(a)+' 올':sino(a)+' 대 '+sino(b);}
@@ -96,6 +109,7 @@ b.onclick=function(){sound=!sound;b.textContent=sound?'🔊 소리 켜짐':'🔇
   el('msg').textContent = board.message || '';
 }
 soundButton();
+tuneControls();
 var query = new URLSearchParams(location.search);
 var host = query.get('h') || '', id = query.get('b') || '';
 // Only ever talk to a Firebase database, whatever the link says.
