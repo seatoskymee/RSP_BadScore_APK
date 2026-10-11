@@ -186,15 +186,22 @@ if (!hostOk || !/^[a-z0-9가-힣-]{6,24}$/.test(id) || (past && !/^[0-9_]{6,24}$
     .then(function (b) {
       if (!b) { el('msg').textContent = '경기 기록을 찾을 수 없습니다'; return; }
       board = b;
-      draw();
-      var d = new Date(b.endedAt || 0), two = function (n) { return (n < 10 ? '0' : '') + n; };
-      el('note').textContent = '지난 경기 · ' + (d.getMonth() + 1) + '/' + d.getDate() + ' ' + two(d.getHours()) + ':' + two(d.getMinutes()) + ' 종료';
-      var home = el('home');
-      if (b.event && b.court) {
-        home.href = '../event/?h=' + host + '&e=' + encodeURIComponent(b.event) + '&c=' + b.court;
-        home.textContent = '← ' + b.court + '번 코트 지난 경기';
-        home.style.display = 'block';
+      // Which tournament and court: from the address, h-<code>-<court>, whatever the record says.
+      var where = /^h-(.+)-(\d\d)$/.exec(id);
+      function show() {
+        draw();
+        var d = new Date(b.endedAt || 0), two = function (n) { return (n < 10 ? '0' : '') + n; };
+        el('note').textContent = '지난 경기 · ' + (d.getMonth() + 1) + '/' + d.getDate() + ' ' + two(d.getHours()) + ':' + two(d.getMinutes()) + ' 종료';
+        var home = el('home');
+        if (where) {
+          home.href = '../event/?h=' + host + '&e=' + encodeURIComponent(where[1]) + '&c=' + (+where[2]);
+          home.textContent = '← ' + (+where[2]) + '번 코트 지난 경기';
+          home.style.display = 'block';
+        }
       }
+      show();
+      // Nothing redraws a finished game by itself, so a turned phone has to ask for it.
+      window.addEventListener('resize', show);
     })
     .catch(function () { el('msg').textContent = '불러오지 못했습니다'; });
 } else {

@@ -38,6 +38,8 @@ a.no{text-decoration:underline;text-underline-offset:4px}
 #load{display:none;border-radius:999px;padding:2px 12px;font-size:13px;font-weight:bold}
 #load.busy{display:inline-block;background:#FFC53D;color:#111}#load.full{display:inline-block;background:#E24B4A;color:#fff}
 #empty:empty{display:none}
+.section{grid-column:1/-1;margin:10px 4px 0;font-size:20px;font-weight:bold;color:#FFC53D;text-decoration:underline;text-underline-offset:4px}
+.section span{color:#9AA4B2;font-size:14px;font-weight:normal;margin-left:8px;display:inline-block;text-decoration:none}
 #past{display:none}
 #past h2{font-size:18px;margin:8px 16px 0}
 #past p{color:#9AA4B2;font-size:15px;margin:8px 16px 24px}
@@ -145,15 +147,19 @@ function gameCard(id, b, court, label) {
   card.appendChild(el('div', 'foot msg', b.message || ''));
   return card;
 }
-// One court's past games, newest first.
+// One court's past games, newest first; all of one tournament's, by the times it ran between.
+var since = 0, until = Infinity;
 function drawHistory(games, court) {
   var grid = document.getElementById('grid'), list = [];
-  for (var id in games || {}) if (games[id] && games[id].left) list.push([id, games[id]]);
+  for (var id in games || {}) {
+    var g = games[id];
+    if (g && g.left && (g.endedAt || 0) >= since && (g.endedAt || 0) <= until) list.push([id, g]);
+  }
   list.sort(function (x, y) { return (y[1].endedAt || 0) - (x[1].endedAt || 0); });
   grid.textContent = '';
   list.forEach(function (g) { grid.appendChild(gameCard(g[0], g[1], court, '')); });
   document.getElementById('empty').textContent = list.length ? '' : '이 코트에서 끝난 경기가 아직 없습니다.';
-  document.getElementById('sub').textContent = '경기 ' + list.length + '건 · 눌러서 점수 내역 보기';
+  document.getElementById('sub').textContent = '전체 경기 ' + list.length + '건 · 눌러서 점수 내역 보기';
 }
 // The tournaments that are over, newest first. Each leads to its results. Drawn on a page of
 // its own ([own]), or under the running tournaments.
@@ -192,7 +198,20 @@ function showResults(from, to, courts) {
     if (--waiting > 0) return;
     all.sort(function (x, y) { return x[2] - y[2] || (x[1].endedAt || 0) - (y[1].endedAt || 0); });
     grid.textContent = '';
-    all.forEach(function (g) { grid.appendChild(gameCard(g[0], g[1], g[2], g[2] + '번 코트 · ')); });
+    var counts = {};
+    all.forEach(function (g) { counts[g[2]] = (counts[g[2]] || 0) + 1; });
+    var shown = 0;
+    all.forEach(function (g) {
+      if (g[2] !== shown) {
+        // The court's number leads to every game played on that court in this tournament.
+        shown = g[2];
+        var head = el('a', 'section', shown + '번 코트 ›');
+        head.href = '?h=' + host + '&e=' + encodeURIComponent(code) + '&c=' + shown + '&r=' + query.get('r') + '&n=' + courts;
+        head.appendChild(el('span', '', '경기 ' + counts[shown] + '건'));
+        grid.appendChild(head);
+      }
+      grid.appendChild(gameCard(g[0], g[1], g[2], ''));
+    });
     document.getElementById('empty').textContent = all.length ? '' : '이 대회에 남아 있는 경기 기록이 없습니다.';
     document.getElementById('sub').textContent = '경기 ' + all.length + '건 · ' + day(from) + ' ~ ' + day(to);
   }
@@ -318,6 +337,32 @@ if (hostOk && !code && query.get('a')) {
   watching('l', 'all');
 } else if (!hostOk || !/^[a-z0-9가-힣]{2,12}$/.test(code)) {
   document.getElementById('empty').textContent = '링크가 올바르지 않습니다';
+} else if (/^([1-9]|1[0-9]|2[0-4])$/.test(query.get('c') || '')) {
+  var court = +query.get('c'), up = document.getElementById('back');
+  var span = /^(\d{1,13})-(\d{10,13})$/.exec(query.get('r') || '');
+  up.style.display = 'inline';
+  if (span) {
+    // From a finished tournament's results: that tournament's games on this court, and back there.
+    until = +span[2] + 3600000;
+    since = +span[1] || +span[2] - 7 * 86400000;
+    up.href = '?h=' + host + '&e=' + encodeURIComponent(code) + '&r=' + span[1] + '-' + span[2] + '&n=' + (+query.get('n') || 24);
+    up.textContent = '← 대회 결과';
+    pollHistory(court);
+  } else {
+    // From the board of a tournament that is on: its games on this court, since it was made.
+    up.href = '?h=' + host + '&e=' + encodeURIComponent(code);
+    up.textContent = '← 대회 현황판';
+    fetch('https://' + host + '/boards/event-list/made/' + encodeURIComponent(code) + '.json', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (made) { if (made > 0) since = made; })
+      .catch(function () {})
+      .then(function () { pollHistory(court); });
+    // A list of finished games changes when one more ends, which is not often.
+    setInterval(function () { pollHistory(court); }, 60000);
+    document.addEventListener('visibilitychange', function () { pollHistory(court); });
+  }
+  document.title = code + ' · ' + court + '번 코트 경기';
+  document.getElementById('title').textContent = code + ' · ' + court + '번 코트 경기';
 } else if (/^\d{1,13}-\d{10,13}$/.test(query.get('r') || '')) {
   var range = query.get('r').split('-'), count = +query.get('n');
   var list = document.getElementById('back');
@@ -327,17 +372,6 @@ if (hostOk && !code && query.get('a')) {
   document.title = code + ' · 대회 결과';
   document.getElementById('title').textContent = code + ' · 대회 결과';
   showResults(+range[0], +range[1], count >= 1 && count <= 24 ? count : 24);
-} else if (/^([1-9]|1[0-9]|2[0-4])$/.test(query.get('c') || '')) {
-  var court = +query.get('c'), up = document.getElementById('back');
-  up.href = '?h=' + host + '&e=' + encodeURIComponent(code);
-  up.textContent = '← 대회 현황판';
-  up.style.display = 'inline';
-  document.title = code + ' · ' + court + '번 코트 지난 경기';
-  document.getElementById('title').textContent = code + ' · ' + court + '번 코트 지난 경기';
-  pollHistory(court);
-  // A list of finished games changes when one more ends, which is not often.
-  setInterval(function () { pollHistory(court); }, 60000);
-  document.addEventListener('visibilitychange', function () { pollHistory(court); });
 } else {
   var back = document.getElementById('back');
   back.href = '?h=' + host;
