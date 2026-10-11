@@ -47,7 +47,7 @@ function draw() {
     if (!b || !b.left || b.ended || !b.aliveAt || now - b.aliveAt > FRESH) continue;
     shown++;
     var card = el('a', 'court');
-    card.href = '../view/?h=' + host + '&b=e-' + code + '-' + two(n);
+    card.href = '../view/?h=' + host + '&b=' + encodeURIComponent('e-' + code + '-' + two(n));
     var top = el('div', 'top'), quiet = now - b.aliveAt;
     top.appendChild(el('span', 'no', n + '번 코트'));
     top.appendChild(el('span', 'state' + (quiet < 90000 && !b.message ? ' live' : ''),
@@ -71,7 +71,7 @@ function draw() {
 }
 function poll() {
   for (var n = 1; n <= COURTS; n++) (function (n) {
-    fetch('https://' + host + '/boards/e-' + code + '-' + two(n) + '.json', { cache: 'no-store' })
+    fetch('https://' + host + '/boards/' + encodeURIComponent('e-' + code + '-' + two(n)) + '.json', { cache: 'no-store' })
       .then(function (r) { return r.json(); })
       .then(function (b) { boards[n] = b; })
       .catch(function () {});
@@ -79,7 +79,7 @@ function poll() {
 }
 // Only ever talk to a Firebase database, whatever the link says.
 var hostOk = /^[a-z0-9.-]+\.(firebaseio\.com|firebasedatabase\.app)$/.test(host);
-if (!hostOk || !/^[a-z0-9]{4,12}$/.test(code)) {
+if (!hostOk || !/^[a-z0-9가-힣]{2,12}$/.test(code)) {
   document.getElementById('empty').textContent = '링크가 올바르지 않습니다';
 } else {
   document.getElementById('title').textContent = '대회 현황판 · ' + code;

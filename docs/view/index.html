@@ -110,8 +110,8 @@ b.onclick=function(){sound=!sound;b.textContent=sound?'🔊 소리 켜짐':'🔇
   if (board.app) el('app').href = board.app;
   // A court of a tournament links back to that tournament's board; a single board has no home.
   var home = el('home');
-  if (board.event && /^[a-z0-9]{4,12}$/.test(board.event)) {
-    home.href = '../event/?h=' + host + '&e=' + board.event;
+  if (board.event && /^[a-z0-9가-힣]{2,12}$/.test(board.event)) {
+    home.href = '../event/?h=' + host + '&e=' + encodeURIComponent(board.event);
     home.textContent = '← 대회 현황판' + (board.court ? ' · ' + board.court + '번 코트' : '');
     home.style.display = 'block';
   } else {
@@ -125,10 +125,10 @@ var query = new URLSearchParams(location.search);
 var host = query.get('h') || '', id = query.get('b') || '';
 // Only ever talk to a Firebase database, whatever the link says.
 var hostOk = /^[a-z0-9.-]+\.(firebaseio\.com|firebasedatabase\.app)$/.test(host);
-if (!hostOk || !/^[a-z0-9-]{6,24}$/.test(id)) {
+if (!hostOk || !/^[a-z0-9가-힣-]{6,24}$/.test(id)) {
   el('msg').textContent = '링크가 올바르지 않습니다';
 } else {
-  var source = new EventSource('https://' + host + '/boards/' + id + '.json');
+  var source = new EventSource('https://' + host + '/boards/' + encodeURIComponent(id) + '.json');
   source.addEventListener('put', function (e) {
     var change = JSON.parse(e.data);
     if (change.path === '/') { board = change.data; }
