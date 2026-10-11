@@ -28,10 +28,12 @@ h1{font-size:22px;margin:0}
 .foot{color:#9AA4B2;font-size:13px;margin:8px 4px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .foot.msg{color:#FFC53D;font-size:15px}
 #empty{padding:40px 16px;color:#9AA4B2;font-size:18px;text-align:center}
+#load{display:none;border-radius:999px;padding:2px 12px;font-size:13px;font-weight:bold}
+#load.busy{display:inline-block;background:#FFC53D;color:#111}#load.full{display:inline-block;background:#E24B4A;color:#fff}
 #back{color:#9AA4B2;font-size:14px;text-decoration:none;display:none}
 .event{font-size:30px;font-weight:bold;color:#FFC53D;margin:6px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 </style></head><body>
-<header><a id="back">← 대회 목록</a><h1 id="title">대회 현황판</h1><span id="sub"></span></header>
+<header><a id="back">← 대회 목록</a><h1 id="title">대회 현황판</h1><span id="sub"></span><span id="load"></span></header>
 <div id="grid"></div>
 <div id="empty"></div>
 <script>
@@ -41,13 +43,14 @@ var COURTS = 24, FRESH = 6 * 3600 * 1000, LISTED = 3600 * 1000;
 var RESTING = 10 * 60000, GONE = 2 * 3600 * 1000, DONE = 30 * 60000;
 var query = new URLSearchParams(location.search);
 var host = query.get('h') || '', code = (query.get('e') || '').toLowerCase();
-var boards = {};
+var boards = {}, live = {}, round = 0;
 function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
 function two(n) { return (n < 10 ? '0' : '') + n; }
 function clock(ms) { var s = Math.floor(Math.max(0, ms) / 1000); return two(Math.floor(s / 60)) + ':' + two(s % 60); }
 function draw() {
   var now = Date.now(), grid = document.getElementById('grid'), shown = 0;
   grid.textContent = '';
+  live = {};
   for (var n = 1; n <= COURTS; n++) {
     var b = boards[n];
     // A slot left over from an earlier event with the same code is not part of this one.
@@ -56,6 +59,7 @@ function draw() {
     var idle = now - (b.changedAt || b.aliveAt);
     if (idle > GONE || (b.message && b.endedAt && now - b.endedAt > DONE)) continue;
     shown++;
+    live[n] = true;
     var card = el('a', 'court');
     card.href = '../view/?h=' + host + '&b=' + encodeURIComponent('e-' + code + '-' + two(n));
     var top = el('div', 'top'), quiet = now - b.aliveAt;
@@ -82,8 +86,16 @@ function draw() {
   document.getElementById('empty').textContent = shown ? '' : '아직 참가한 코트가 없습니다. 점수판 앱의 메뉴 → 대회 모드에서 이 대회 코드로 참가하세요.';
   document.getElementById('sub').textContent = '코트 ' + shown + '개 · ' + two(new Date(now).getHours()) + ':' + two(new Date(now).getMinutes()) + ':' + two(new Date(now).getSeconds());
 }
+// Every request counts against the database's monthly allowance, so the page asks for as little
+// as it can: the courts on the board often, all the other numbers only every few rounds (which
+// is how soon a newly joined court appears), and nothing while the page is not on screen.
+// PACE, by server load: [milliseconds between rounds, rounds between asking for every number].
+var PACE = [[3000, 5], [6000, 5], [15000, 4]], LIST_PACE = [15000, 30000, 60000];
 function poll() {
+  if (document.hidden) return;
+  var all = round++ % PACE[load][1] === 0;
   for (var n = 1; n <= COURTS; n++) (function (n) {
+    if (!all && !live[n]) return;
     fetch('https://' + host + '/boards/' + encodeURIComponent('e-' + code + '-' + two(n)) + '.json', { cache: 'no-store' })
       .then(function (r) { return r.json(); })
       .then(function (b) { boards[n] = b; })
@@ -109,18 +121,74 @@ function drawList(doc) {
   document.getElementById('sub').textContent = '대회 ' + codes.length + '개 · ' + two(new Date(now).getHours()) + ':' + two(new Date(now).getMinutes());
 }
 function pollList() {
+  if (document.hidden) return;
   fetch('https://' + host + '/boards/event-list.json', { cache: 'no-store' })
     .then(function (r) { return r.json(); })
     .then(drawList)
     .catch(function () {});
+}
+// Says "one screen is watching this" to boards/view-stats once a minute, so the administrator's
+// page can count viewers against the database's limits. Only a random id for this tab and the
+// time go there; the entry is taken back when the page is left.
+var sid = Math.random().toString(36).slice(2, 10);
+function presence(kind, target, on) {
+  var body = { v: 1 };
+  body[kind + '/' + target + '/' + sid] = on ? Date.now() : null;
+  // A POST marked as PATCH: merged into the list, and needs no preflight request.
+  fetch('https://' + host + '/boards/view-stats.json?print=silent&x-http-method-override=PATCH',
+    { method: 'POST', body: JSON.stringify(body), keepalive: true }).catch(function () {});
+}
+// How busy the database is, worked out from the screens watching right now (boards/view-stats)
+// the same way the app does: 0 normal, 1 busy, 2 very busy. The page says so in colour and asks
+// less often as it rises. "force" is the administrator's override, for when the month's
+// allowance is running out, which cannot be seen from here.
+var load = 0, onLoadChange = null;
+function loadLevel(stats, now) {
+  stats = stats || {};
+  function watching(kind) {
+    var n = 0, targets = stats[kind] || {};
+    for (var t in targets) for (var tab in targets[t]) if (now - targets[t][tab] < 150000) n++;
+    return n;
+  }
+  var b = watching('b'), perHour = b * 0.2 + watching('l') * 0.1 + watching('e') * 10;
+  var seen = (b >= 90 || perHour >= 500) ? 2 : (b >= 70 || perHour >= 150) ? 1 : 0;
+  return Math.max(seen, Math.min(2, Math.max(0, stats.force | 0)));
+}
+function checkLoad() {
+  if (document.hidden) return;
+  fetch('https://' + host + '/boards/view-stats.json', { cache: 'no-store' })
+    .then(function (r) { return r.json(); })
+    .then(function (stats) {
+      var was = load, pill = document.getElementById('load');
+      load = loadLevel(stats, Date.now());
+      pill.className = ['', 'busy', 'full'][load];
+      pill.textContent = ['', '서버 혼잡 · 갱신 간격을 늘렸습니다', '서버 매우 혼잡 · 갱신이 느려집니다'][load];
+      if (was !== load && onLoadChange) onLoadChange();
+    })
+    .catch(function () {});
+}
+function watchLoad() {
+  // Not all screens at the same moment.
+  setTimeout(checkLoad, 2000 + Math.random() * 8000);
+  setInterval(checkLoad, 300000);
+}
+// A screen counts while it is on screen, which is also when it asks the database for scores.
+function watching(kind, target) {
+  function beat() { if (!document.hidden) presence(kind, target, true); }
+  beat();
+  setInterval(beat, 60000);
+  document.addEventListener('visibilitychange', function () { presence(kind, target, !document.hidden); });
+  window.addEventListener('pagehide', function () { presence(kind, target, false); });
 }
 // Only ever talk to a Firebase database, whatever the link says.
 var hostOk = /^[a-z0-9.-]+\.(firebaseio\.com|firebasedatabase\.app)$/.test(host);
 if (hostOk && !code) {
   document.title = '운영 중인 대회';
   document.getElementById('title').textContent = '운영 중인 대회';
-  pollList();
-  setInterval(pollList, 15000);
+  (function again() { pollList(); setTimeout(again, LIST_PACE[load]); })();
+  watchLoad();
+  document.addEventListener('visibilitychange', pollList);
+  watching('l', 'all');
 } else if (!hostOk || !/^[a-z0-9가-힣]{2,12}$/.test(code)) {
   document.getElementById('empty').textContent = '링크가 올바르지 않습니다';
 } else {
@@ -128,8 +196,16 @@ if (hostOk && !code) {
   back.href = '?h=' + host;
   back.style.display = 'inline';
   document.getElementById('title').textContent = '대회 현황판 · ' + code;
-  poll();
-  setInterval(poll, 3000);
+  (function again() { poll(); setTimeout(again, PACE[load][0]); })();
+  // A tournament made with a number of courts has no others to ask about.
+  fetch('https://' + host + '/boards/event-list/courts/' + encodeURIComponent(code) + '.json', { cache: 'no-store' })
+    .then(function (r) { return r.json(); })
+    .then(function (n) { if (n >= 1 && n <= 24) COURTS = n; })
+    .catch(function () {});
+  watchLoad();
   setInterval(draw, 1000);
+  // Back on screen: everything is asked for again at once.
+  document.addEventListener('visibilitychange', function () { round = 0; poll(); });
+  watching('e', code);
 }
 </script></body></html>

@@ -24,6 +24,8 @@ html,body{margin:0;height:100%;background:#0E1116;color:#fff;font-family:sans-se
 .flag{color:#FFC53D;font-size:4vh;font-weight:bold;min-height:5vh}
 #graph{display:block;width:98vw;height:22vh;margin:1vh 1vw 0;background:#171B22}
 #note{height:3vh;line-height:3vh;text-align:center;font-size:2.2vh;color:#9AA4B2;white-space:nowrap}
+#load{display:none;text-align:center;font-size:2.2vh;line-height:3vh;font-weight:bold}
+#load.busy{display:block;background:#FFC53D;color:#111}#load.full{display:block;background:#E24B4A;color:#fff}
 #msg{height:5vh;line-height:5vh;text-align:center;font-size:3.8vh;color:#FFC53D;white-space:nowrap}
 </style></head><body>
 <div id="bar"><a id="home"></a><div id="info"></div>
@@ -35,6 +37,7 @@ html,body{margin:0;height:100%;background:#0E1116;color:#fff;font-family:sans-se
 <div class="side" id="r"><div class="serve"></div><div class="name"></div><div class="court"></div><div class="score"></div><div class="flag"></div></div>
 </div>
 <div id="tune"><label>음량 <input id="vol" type="range" min="0" max="100" step="5"><span id="volv"></span></label><label>속도 <input id="rate" type="range" min="50" max="200" step="10"><span id="ratev"></span></label></div>
+<div id="load"></div>
 <canvas id="graph"></canvas>
 <div id="msg"></div>
 <div id="note"></div>
@@ -125,18 +128,112 @@ soundButton();
 tuneControls();
 var query = new URLSearchParams(location.search);
 var host = query.get('h') || '', id = query.get('b') || '';
+// Says "one screen is watching this" to boards/view-stats once a minute, so the administrator's
+// page can count viewers against the database's limits. Only a random id for this tab and the
+// time go there; the entry is taken back when the page is left.
+var sid = Math.random().toString(36).slice(2, 10);
+function presence(kind, target, on) {
+  var body = { v: 1 };
+  body[kind + '/' + target + '/' + sid] = on ? Date.now() : null;
+  // A POST marked as PATCH: merged into the list, and needs no preflight request.
+  fetch('https://' + host + '/boards/view-stats.json?print=silent&x-http-method-override=PATCH',
+    { method: 'POST', body: JSON.stringify(body), keepalive: true }).catch(function () {});
+}
+// How busy the database is, worked out from the screens watching right now (boards/view-stats)
+// the same way the app does: 0 normal, 1 busy, 2 very busy. The page says so in colour and asks
+// less often as it rises. "force" is the administrator's override, for when the month's
+// allowance is running out, which cannot be seen from here.
+var load = 0, onLoadChange = null;
+function loadLevel(stats, now) {
+  stats = stats || {};
+  function watching(kind) {
+    var n = 0, targets = stats[kind] || {};
+    for (var t in targets) for (var tab in targets[t]) if (now - targets[t][tab] < 150000) n++;
+    return n;
+  }
+  var b = watching('b'), perHour = b * 0.2 + watching('l') * 0.1 + watching('e') * 10;
+  var seen = (b >= 90 || perHour >= 500) ? 2 : (b >= 70 || perHour >= 150) ? 1 : 0;
+  return Math.max(seen, Math.min(2, Math.max(0, stats.force | 0)));
+}
+function checkLoad() {
+  if (document.hidden) return;
+  fetch('https://' + host + '/boards/view-stats.json', { cache: 'no-store' })
+    .then(function (r) { return r.json(); })
+    .then(function (stats) {
+      var was = load, pill = document.getElementById('load');
+      load = loadLevel(stats, Date.now());
+      pill.className = ['', 'busy', 'full'][load];
+      pill.textContent = ['', '서버 혼잡 · 갱신 간격을 늘렸습니다', '서버 매우 혼잡 · 갱신이 느려집니다'][load];
+      if (was !== load && onLoadChange) onLoadChange();
+    })
+    .catch(function () {});
+}
+function watchLoad() {
+  // Not all screens at the same moment.
+  setTimeout(checkLoad, 2000 + Math.random() * 8000);
+  setInterval(checkLoad, 300000);
+}
 // Only ever talk to a Firebase database, whatever the link says.
 var hostOk = /^[a-z0-9.-]+\.(firebaseio\.com|firebasedatabase\.app)$/.test(host);
 if (!hostOk || !/^[a-z0-9가-힣-]{6,24}$/.test(id)) {
   el('msg').textContent = '링크가 올바르지 않습니다';
 } else {
-  var source = new EventSource('https://' + host + '/boards/' + encodeURIComponent(id) + '.json');
-  source.addEventListener('put', function (e) {
-    var change = JSON.parse(e.data);
-    if (change.path === '/') { board = change.data; }
+  var source = null, poller = null, away = null;
+  var address = 'https://' + host + '/boards/' + encodeURIComponent(id) + '.json';
+  function show() {
     if (!board) { el('msg').textContent = '아직 공유된 점수가 없습니다'; } else { draw(); announce(board); }
+  }
+  // Normally the score is pushed over a connection that stays open. When the server is very
+  // busy the page gives that connection up and asks every ten seconds instead, which leaves
+  // the 100 connections of the free plan to others.
+  function listen() {
+    if (load === 2) {
+      var ask = function () {
+        fetch(address, { cache: 'no-store' }).then(function (r) { return r.json(); })
+          .then(function (b) { board = b; show(); })
+          .catch(function () { el('msg').textContent = '연결 중…'; });
+      };
+      poller = setInterval(ask, 10000);
+      ask();
+    } else {
+      source = new EventSource(address);
+      source.addEventListener('put', function (e) {
+        var change = JSON.parse(e.data);
+        if (change.path === '/') { board = change.data; }
+        show();
+      });
+      source.onerror = function () { el('msg').textContent = '연결 중…'; };
+    }
+  }
+  function hang() {
+    if (source) { source.close(); source = null; }
+    if (poller) { clearInterval(poller); poller = null; }
+  }
+  function connect() {
+    if (source || poller) return;
+    listen();
+    presence('b', id, true);
+  }
+  function disconnect() {
+    if (!source && !poller) return;
+    hang();
+    presence('b', id, false);
+  }
+  onLoadChange = function () {
+    if ((source || poller) && !!poller !== (load === 2)) { hang(); listen(); }
+  };
+  // The free database plan allows 100 open connections in all. A page nobody is looking at
+  // gives its connection back after a minute, unless it is reading the score aloud, and takes
+  // it again the moment it is looked at.
+  document.addEventListener('visibilitychange', function () {
+    clearTimeout(away);
+    if (!document.hidden) connect();
+    else if (!sound) away = setTimeout(function () { if (document.hidden && !sound) disconnect(); }, 60000);
   });
-  source.onerror = function () { el('msg').textContent = '연결 중…'; };
+  window.addEventListener('pagehide', function () { if (source || poller) presence('b', id, false); });
+  connect();
+  watchLoad();
+  setInterval(function () { if (source || poller) presence('b', id, true); }, 60000);
   setInterval(draw, 1000);
 }
 </script></body></html>
