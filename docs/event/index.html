@@ -1,0 +1,90 @@
+<!doctype html>
+<!--
+  Tournament board: every court that has joined one event code, on one page.
+  Link form: .../event/?h=<database host>&e=<event code>
+  A court that joins publishes its board to boards/e-<code>-<court number>, so this page needs no
+  list: it simply asks for court 1 to 24 of that code and shows the ones that are in use.
+-->
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>대회 현황판</title>
+<style>
+html,body{margin:0;min-height:100%;background:#0E1116;color:#fff;font-family:sans-serif}
+header{display:flex;align-items:baseline;gap:12px;padding:12px 16px 4px;flex-wrap:wrap}
+h1{font-size:22px;margin:0}
+#sub{color:#9AA4B2;font-size:14px}
+#grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;padding:12px 16px 24px}
+.court{background:#171B22;border-radius:14px;padding:10px;text-decoration:none;color:#fff;display:block}
+.top{display:flex;justify-content:space-between;align-items:baseline;margin:0 4px 8px}
+.no{font-size:20px;font-weight:bold;color:#FFC53D}
+.state{font-size:13px;color:#9AA4B2}
+.state.live{color:#5DCAA5}
+.sides{display:flex;gap:8px}
+.side{flex:1;min-width:0;border-radius:10px;text-align:center;padding:8px 4px}
+.name{font-size:16px;font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.score{font-size:64px;font-weight:bold;line-height:1.1}
+.foot{color:#9AA4B2;font-size:13px;margin:8px 4px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.foot.msg{color:#FFC53D;font-size:15px}
+#empty{padding:40px 16px;color:#9AA4B2;font-size:18px;text-align:center}
+</style></head><body>
+<header><h1 id="title">대회 현황판</h1><span id="sub"></span></header>
+<div id="grid"></div>
+<div id="empty"></div>
+<script>
+var COURTS = 24, FRESH = 6 * 3600 * 1000;
+var query = new URLSearchParams(location.search);
+var host = query.get('h') || '', code = (query.get('e') || '').toLowerCase();
+var boards = {};
+function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+function two(n) { return (n < 10 ? '0' : '') + n; }
+function clock(ms) { var s = Math.floor(Math.max(0, ms) / 1000); return two(Math.floor(s / 60)) + ':' + two(s % 60); }
+function draw() {
+  var now = Date.now(), grid = document.getElementById('grid'), shown = 0;
+  grid.textContent = '';
+  for (var n = 1; n <= COURTS; n++) {
+    var b = boards[n];
+    // A slot left over from an earlier event with the same code is not part of this one.
+    if (!b || !b.left || b.ended || !b.aliveAt || now - b.aliveAt > FRESH) continue;
+    shown++;
+    var card = el('a', 'court');
+    card.href = '../view/?h=' + host + '&b=e-' + code + '-' + two(n);
+    var top = el('div', 'top'), quiet = now - b.aliveAt;
+    top.appendChild(el('span', 'no', n + '번 코트'));
+    top.appendChild(el('span', 'state' + (quiet < 90000 && !b.message ? ' live' : ''),
+      b.message ? '경기 종료' : quiet < 90000 ? '진행 중' : '신호 없음 ' + Math.floor(quiet / 60000) + '분'));
+    card.appendChild(top);
+    var sides = el('div', 'sides');
+    [b.left, b.right].forEach(function (s) {
+      var side = el('div', 'side');
+      side.style.background = s.color;
+      side.appendChild(el('div', 'name', (s.serve ? '● ' : '') + s.name));
+      side.appendChild(el('div', 'score', s.score));
+      sides.appendChild(side);
+    });
+    card.appendChild(sides);
+    var played = b.startedAt ? (b.endedAt || now) - b.startedAt : 0;
+    card.appendChild(el('div', 'foot' + (b.message ? ' msg' : ''), b.message || ((b.info || '') + ' · ⏱ ' + clock(played))));
+    grid.appendChild(card);
+  }
+  document.getElementById('empty').textContent = shown ? '' : '아직 참가한 코트가 없습니다. 점수판 앱의 메뉴 → 대회 모드에서 이 대회 코드로 참가하세요.';
+  document.getElementById('sub').textContent = '코트 ' + shown + '개 · ' + two(new Date(now).getHours()) + ':' + two(new Date(now).getMinutes()) + ':' + two(new Date(now).getSeconds());
+}
+function poll() {
+  for (var n = 1; n <= COURTS; n++) (function (n) {
+    fetch('https://' + host + '/boards/e-' + code + '-' + two(n) + '.json', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (b) { boards[n] = b; })
+      .catch(function () {});
+  })(n);
+}
+// Only ever talk to a Firebase database, whatever the link says.
+var hostOk = /^[a-z0-9.-]+\.(firebaseio\.com|firebasedatabase\.app)$/.test(host);
+if (!hostOk || !/^[a-z0-9]{4,12}$/.test(code)) {
+  document.getElementById('empty').textContent = '링크가 올바르지 않습니다';
+} else {
+  document.getElementById('title').textContent = '대회 현황판 · ' + code;
+  poll();
+  setInterval(poll, 3000);
+  setInterval(draw, 1000);
+}
+</script></body></html>

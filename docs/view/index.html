@@ -115,7 +115,7 @@ var query = new URLSearchParams(location.search);
 var host = query.get('h') || '', id = query.get('b') || '';
 // Only ever talk to a Firebase database, whatever the link says.
 var hostOk = /^[a-z0-9.-]+\.(firebaseio\.com|firebasedatabase\.app)$/.test(host);
-if (!hostOk || !/^[a-z0-9]{6,24}$/.test(id)) {
+if (!hostOk || !/^[a-z0-9-]{6,24}$/.test(id)) {
   el('msg').textContent = '링크가 올바르지 않습니다';
 } else {
   var source = new EventSource('https://' + host + '/boards/' + id + '.json');
