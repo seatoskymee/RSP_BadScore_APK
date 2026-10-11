@@ -4,6 +4,8 @@
   Link form: .../event/?h=<database host>&e=<event code>
   A court that joins publishes its board to boards/e-<code>-<court number>, so this page needs no
   list: it simply asks for court 1 to 24 of that code and shows the ones that are in use.
+  Without an event code (.../event/?h=<database host>) the page lists the tournaments that are
+  running now, from boards/event-list, each one a link to its own board.
 -->
 <html lang="ko"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -26,12 +28,14 @@ h1{font-size:22px;margin:0}
 .foot{color:#9AA4B2;font-size:13px;margin:8px 4px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .foot.msg{color:#FFC53D;font-size:15px}
 #empty{padding:40px 16px;color:#9AA4B2;font-size:18px;text-align:center}
+#back{color:#9AA4B2;font-size:14px;text-decoration:none;display:none}
+.event{font-size:30px;font-weight:bold;color:#FFC53D;margin:6px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 </style></head><body>
-<header><h1 id="title">대회 현황판</h1><span id="sub"></span></header>
+<header><a id="back">← 대회 목록</a><h1 id="title">대회 현황판</h1><span id="sub"></span></header>
 <div id="grid"></div>
 <div id="empty"></div>
 <script>
-var COURTS = 24, FRESH = 6 * 3600 * 1000;
+var COURTS = 24, FRESH = 6 * 3600 * 1000, LISTED = 3600 * 1000;
 var query = new URLSearchParams(location.search);
 var host = query.get('h') || '', code = (query.get('e') || '').toLowerCase();
 var boards = {};
@@ -77,11 +81,41 @@ function poll() {
       .catch(function () {});
   })(n);
 }
+// Without an event code: the tournaments that a court has refreshed within the last hour.
+function drawList(list) {
+  var now = Date.now(), grid = document.getElementById('grid'), codes = [];
+  for (var c in list || {}) if (/^[a-z0-9가-힣]{2,12}$/.test(c) && now - list[c] < LISTED) codes.push(c);
+  codes.sort(function (a, b) { return list[b] - list[a]; });
+  grid.textContent = '';
+  codes.forEach(function (c) {
+    var card = el('a', 'court');
+    card.href = '?h=' + host + '&e=' + encodeURIComponent(c);
+    card.appendChild(el('div', 'event', '🏆 ' + c));
+    card.appendChild(el('div', 'foot', '눌러서 코트별 점수 보기'));
+    grid.appendChild(card);
+  });
+  document.getElementById('empty').textContent = codes.length ? '' : '지금 운영 중인 대회가 없습니다.';
+  document.getElementById('sub').textContent = '대회 ' + codes.length + '개 · ' + two(new Date(now).getHours()) + ':' + two(new Date(now).getMinutes());
+}
+function pollList() {
+  fetch('https://' + host + '/boards/event-list/list.json', { cache: 'no-store' })
+    .then(function (r) { return r.json(); })
+    .then(drawList)
+    .catch(function () {});
+}
 // Only ever talk to a Firebase database, whatever the link says.
 var hostOk = /^[a-z0-9.-]+\.(firebaseio\.com|firebasedatabase\.app)$/.test(host);
-if (!hostOk || !/^[a-z0-9가-힣]{2,12}$/.test(code)) {
+if (hostOk && !code) {
+  document.title = '운영 중인 대회';
+  document.getElementById('title').textContent = '운영 중인 대회';
+  pollList();
+  setInterval(pollList, 15000);
+} else if (!hostOk || !/^[a-z0-9가-힣]{2,12}$/.test(code)) {
   document.getElementById('empty').textContent = '링크가 올바르지 않습니다';
 } else {
+  var back = document.getElementById('back');
+  back.href = '?h=' + host;
+  back.style.display = 'inline';
   document.getElementById('title').textContent = '대회 현황판 · ' + code;
   poll();
   setInterval(poll, 3000);
