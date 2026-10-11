@@ -69,8 +69,10 @@ run('A',d.colorA);run('B',d.colorB);
 var tx=L,items=[[d.colorA,d.nameA+' '+a],[d.colorB,d.nameB+' '+b]];
 for(i=0;i<2;i++){g.fillStyle=items[i][0];g.fillRect(tx,6,10,10);tx+=14;g.fillStyle='#9AA4B2';g.fillText(items[i][1],tx,15);tx+=g.measureText(items[i][1]).width+16;}}var sound=false,lastSaid=null;
 function say(t){if(!sound||!window.speechSynthesis)return;speechSynthesis.cancel();var u=new SpeechSynthesisUtterance(t);u.lang='ko-KR';speechSynthesis.speak(u);}
-function callout(d){if(d.message)return d.message.replace(/(\d+):(\d+)/,function(m,a,b){return a+' 대 '+b+',';});
-var l=d.left,r=d.right,a=r.serve?r.score:l.score,b=r.serve?l.score:r.score;return(a==b&&a>0)?a+' 올':a+' 대 '+b;}
+function sino(n){n=Number(n);if(!(n>=0&&n<100))return String(n);if(n==0)return '영';
+var d=['','일','이','삼','사','오','육','칠','팔','구'],t=Math.floor(n/10);return(t>1?d[t]:'')+(t>0?'십':'')+d[n%10];}
+function callout(d){if(d.message)return d.message.replace(/(\d+):(\d+)/,function(m,a,b){return sino(a)+' 대 '+sino(b)+',';});
+var l=d.left,r=d.right,a=r.serve?r.score:l.score,b=r.serve?l.score:r.score;return(a==b&&a>0)?sino(a)+' 올':sino(a)+' 대 '+sino(b);}
 function announce(d){var now=callout(d);if(lastSaid!==null&&now!==lastSaid&&!d.ended)say(now);lastSaid=now;}
 function soundButton(){var b=document.getElementById('snd');if(!window.speechSynthesis){b.style.display='none';return;}
 b.onclick=function(){sound=!sound;b.textContent=sound?'🔊 소리 켜짐':'🔇 소리 켜기';if(sound)say('점수 음성 안내를 켰습니다');else speechSynthesis.cancel();};}function draw() {
