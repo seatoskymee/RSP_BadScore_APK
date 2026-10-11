@@ -100,6 +100,9 @@ b.onclick=function(){sound=!sound;b.textContent=sound?'🔊 소리 켜짐':'🔇
     note = '점수 공유가 종료되었습니다 (점수판 앱을 닫음)';
   } else if (quiet > 90000) {
     note = '점수판 앱이 화면에 떠 있지 않습니다 · 마지막 신호 ' + Math.floor(quiet / 60000) + '분 전';
+  } else if (!board.message && board.changedAt && Date.now() - board.changedAt >= 600000) {
+    // The app is open but nobody is scoring.
+    note = '쉬는 중 · ' + Math.floor((Date.now() - board.changedAt) / 60000) + '분째 점수 변화 없음';
   }
   el('note').textContent = note;
   el('board').style.opacity = board.ended ? 0.45 : 1;

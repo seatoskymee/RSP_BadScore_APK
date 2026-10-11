@@ -36,6 +36,9 @@ h1{font-size:22px;margin:0}
 <div id="empty"></div>
 <script>
 var COURTS = 24, FRESH = 6 * 3600 * 1000, LISTED = 3600 * 1000;
+// Judged by when the score last moved, not by the app being open: a court rests after RESTING,
+// is taken off the board after GONE, and a finished match stays up for DONE.
+var RESTING = 10 * 60000, GONE = 2 * 3600 * 1000, DONE = 30 * 60000;
 var query = new URLSearchParams(location.search);
 var host = query.get('h') || '', code = (query.get('e') || '').toLowerCase();
 var boards = {};
@@ -49,13 +52,19 @@ function draw() {
     var b = boards[n];
     // A slot left over from an earlier event with the same code is not part of this one.
     if (!b || !b.left || b.ended || !b.aliveAt || now - b.aliveAt > FRESH) continue;
+    // Boards from an app that does not send "changedAt" yet count as changed at their last signal.
+    var idle = now - (b.changedAt || b.aliveAt);
+    if (idle > GONE || (b.message && b.endedAt && now - b.endedAt > DONE)) continue;
     shown++;
     var card = el('a', 'court');
     card.href = '../view/?h=' + host + '&b=' + encodeURIComponent('e-' + code + '-' + two(n));
     var top = el('div', 'top'), quiet = now - b.aliveAt;
     top.appendChild(el('span', 'no', n + '번 코트'));
-    top.appendChild(el('span', 'state' + (quiet < 90000 && !b.message ? ' live' : ''),
-      b.message ? '경기 종료' : quiet < 90000 ? '진행 중' : '신호 없음 ' + Math.floor(quiet / 60000) + '분'));
+    var resting = !b.message && quiet < 90000 && idle >= RESTING;
+    if (resting) card.style.opacity = 0.55;
+    top.appendChild(el('span', 'state' + (quiet < 90000 && !b.message && !resting ? ' live' : ''),
+      b.message ? '경기 종료' : quiet >= 90000 ? '신호 없음 ' + Math.floor(quiet / 60000) + '분'
+        : resting ? '쉬는 중 · ' + Math.floor(idle / 60000) + '분' : '진행 중'));
     card.appendChild(top);
     var sides = el('div', 'sides');
     [b.left, b.right].forEach(function (s) {
