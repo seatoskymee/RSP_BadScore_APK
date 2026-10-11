@@ -9,9 +9,9 @@
 <title>배드 스코어</title>
 <style>
 html,body{margin:0;height:100%;background:#0E1116;color:#fff;font-family:sans-serif;overflow:hidden}
-#app{position:absolute;top:0;right:2vw;height:6vh;line-height:6vh;font-size:2.6vh;font-weight:bold;color:#FFC53D;text-decoration:none}
-#snd{position:absolute;top:0;right:27vw;height:6vh;line-height:6vh;font-size:2.6vh;font-weight:bold;color:#FFC53D;background:none;border:0;padding:0;font-family:inherit;cursor:pointer}
-#info{height:6vh;line-height:6vh;padding:0 52vw 0 2vw;color:#9AA4B2;font-size:3vh;white-space:nowrap;overflow:hidden}
+#bar{display:flex;align-items:center;gap:3vw;height:6vh;padding:0 2vw;box-sizing:border-box}
+#app,#snd{flex:none;white-space:nowrap;font-size:min(2.6vh,3.6vw);font-weight:bold;color:#FFC53D;text-decoration:none;background:none;border:0;padding:0;font-family:inherit;cursor:pointer}
+#info{flex:1;min-width:0;color:#9AA4B2;font-size:min(3vh,3.4vw);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #board{display:flex;height:62vh;gap:1vw;padding:0 1vw;box-sizing:border-box}
 .side{flex:1;min-width:0;border-radius:2vh;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#171B22}
 .name{font-size:5vh;font-weight:bold}
@@ -23,9 +23,9 @@ html,body{margin:0;height:100%;background:#0E1116;color:#fff;font-family:sans-se
 #note{height:3vh;line-height:3vh;text-align:center;font-size:2.2vh;color:#9AA4B2;white-space:nowrap}
 #msg{height:5vh;line-height:5vh;text-align:center;font-size:3.8vh;color:#FFC53D;white-space:nowrap}
 </style></head><body>
-<div id="info"></div>
+<div id="bar"><div id="info"></div>
 <button id="snd" type="button">🔇 소리 켜기</button>
-<a id="app" href="https://github.com/seatoskymee/RSP_BadScore_APK/releases/latest/download/RSP_BadScore.apk">⬇ 앱 내려받기</a>
+<a id="app" href="https://github.com/seatoskymee/RSP_BadScore_APK/releases/latest/download/RSP_BadScore.apk">⬇ 앱 내려받기</a></div>
 <div id="board">
 <div class="side" id="l"><div class="serve"></div><div class="name"></div><div class="court"></div><div class="score"></div><div class="flag"></div></div>
 <div class="side" id="r"><div class="serve"></div><div class="name"></div><div class="court"></div><div class="score"></div><div class="flag"></div></div>
